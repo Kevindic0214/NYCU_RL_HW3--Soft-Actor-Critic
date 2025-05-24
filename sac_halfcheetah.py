@@ -5,7 +5,7 @@
 import random
 from typing import Dict, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -293,9 +293,8 @@ class SACAgent:
         if self.total_step % self.policy_update_freq == 0:
             # Computing actor loss
             ########## Your Code (<5 lines)##########
-            with torch.no_grad():
-                q1_actor = self.qf_1(state, new_action)
-                q2_actor = self.qf_2(state, new_action)
+            q1_actor = self.qf_1(state, new_action)
+            q2_actor = self.qf_2(state, new_action)
             q_min_actor = torch.min(q1_actor, q2_actor)
             actor_loss = (alpha * log_prob - q_min_actor).mean()
             ########## End of Your Code ##########
@@ -303,6 +302,9 @@ class SACAgent:
             # train actor
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
+            if self.total_step % 1000 == 0:
+                print("mean|grad(μ fc1)| =", 
+                    self.actor.hidden1.weight.grad.abs().mean().item())
             self.actor_optimizer.step()
 
             # target update (vf)
@@ -313,6 +315,9 @@ class SACAgent:
         # train Q functions
         self.qf_1_optimizer.zero_grad()
         qf_1_loss.backward()
+        if self.total_step % 1000 == 0:
+            g = self.qf_1.hidden1.weight.grad.abs().mean().item()
+            print(f"[{self.total_step:>7}] mean|grad(Q1 hidden1 W)| = {g:.6f}")
         self.qf_1_optimizer.step()
 
         self.qf_2_optimizer.zero_grad()
@@ -452,15 +457,15 @@ def seed_torch(seed):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--wandb-run-name", type=str, default="pendulum-sac")
+    parser.add_argument("--wandb-run-name", type=str, default="halfcheetah-sac")
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--discount-factor", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=5e-3)
-    parser.add_argument("--batch-size", type=int, default=128)
-    parser.add_argument("--initial-random-steps", type=int, default=1000)
-    parser.add_argument("--memory-size", type=int, default=100000)
-    parser.add_argument("--num-steps", type=float, default=100000)
-    parser.add_argument("--policy-update-freq", type=int, default=2)
+    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--initial-random-steps", type=int, default=10000)
+    parser.add_argument("--memory-size", type=int, default=1000000)
+    parser.add_argument("--num-steps", type=float, default=1000000)
+    parser.add_argument("--policy-update-freq", type=int, default=1)
     parser.add_argument("--seed", type=int, default=77)
     args = parser.parse_args()
     
@@ -473,6 +478,7 @@ if __name__ == "__main__":
     wandb.init(project="RL-HW3-SAC-HalfCheetah", name=args.wandb_run_name, save_code=True)
     
     # environment
+    torch.backends.cudnn.benchmark = True
     env = gym.make("HalfCheetah-v5", render_mode="rgb_array")
     env = ActionNormalizer(env)
     agent = SACAgent(env, args)

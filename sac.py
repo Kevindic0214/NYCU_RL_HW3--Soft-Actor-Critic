@@ -5,7 +5,7 @@
 import random
 from typing import Dict, Tuple
 
-import gym
+import gymnasium as gym
 import numpy as np
 import torch
 import torch.nn as nn
@@ -230,7 +230,8 @@ class SACAgent:
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool]:
         """Take an action and return the response of the env."""
-        next_state, reward, done, _ = self.env.step(action)
+        next_state, reward, terminated, truncated, _ = self.env.step(action)
+        done = terminated or truncated
 
         if not self.is_test:
             self.transition += [reward, next_state, done]
@@ -292,9 +293,8 @@ class SACAgent:
         if self.total_step % self.policy_update_freq == 0:
             # Computing actor loss
             ########## Your Code (<5 lines)##########
-            with torch.no_grad():
-                q1_actor = self.qf_1(state, new_action)
-                q2_actor = self.qf_2(state, new_action)
+            q1_actor = self.qf_1(state, new_action)
+            q2_actor = self.qf_2(state, new_action)
             q_min_actor = torch.min(q1_actor, q2_actor)
             actor_loss = (alpha * log_prob - q_min_actor).mean()
             ########## End of Your Code ##########
@@ -302,6 +302,9 @@ class SACAgent:
             # train actor
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
+            if self.total_step % 1000 == 0:
+                print("mean|grad(μ fc1)| =", 
+                    self.actor.hidden1.weight.grad.abs().mean().item())            
             self.actor_optimizer.step()
 
             # target update (vf)
@@ -331,7 +334,7 @@ class SACAgent:
         """Train the agent."""
         self.is_test = False
 
-        state = self.env.reset(seed=self.seed)
+        state, _ = self.env.reset(seed=self.seed)
         actor_losses, qf_losses, vf_losses, alpha_losses = [], [], [], []
         scores = []
         score = 0
@@ -349,7 +352,7 @@ class SACAgent:
             
             # if episode ends
             if done:
-                state = self.env.reset(seed=self.seed)
+                state, _ = self.env.reset(seed=self.seed)
                 scores.append(score)
                 ep += 1
                 print(f"Episode {ep} (Total step = {self.total_step}): Total Reward = {score}")
@@ -387,10 +390,10 @@ class SACAgent:
         """Test the agent."""
         self.is_test = True
 
-        # tmp_env = self.env
-        # self.env = gym.wrappers.RecordVideo(self.env, video_folder=video_folder)
+        tmp_env = self.env
+        self.env = gym.wrappers.RecordVideo(self.env, video_folder=video_folder)
 
-        state = self.env.reset(seed=self.seed)
+        state, _ = self.env.reset(seed=self.seed)
         done = False
         score = 0
 
@@ -404,7 +407,7 @@ class SACAgent:
         print("score: ", score)
         self.env.close()
 
-        # self.env = tmp_env
+        self.env = tmp_env
 
     def _target_soft_update(self):
         """Soft-update: target = tau*local + (1-tau)*target."""
@@ -472,7 +475,7 @@ if __name__ == "__main__":
     wandb.init(project="RL-HW3-SAC-Pendulum", name=args.wandb_run_name, save_code=True)
     
     # environment
-    env = gym.make("Pendulum-v1")
+    env = gym.make("Pendulum-v1", render_mode="rgb_array")
     env = ActionNormalizer(env)
     agent = SACAgent(env, args)
     agent.train()
