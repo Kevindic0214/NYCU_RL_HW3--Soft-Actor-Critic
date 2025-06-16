@@ -302,9 +302,6 @@ class SACAgent:
             # train actor
             self.actor_optimizer.zero_grad()
             actor_loss.backward()
-            if self.total_step % 1000 == 0:
-                print("mean|grad(μ fc1)| =", 
-                    self.actor.hidden1.weight.grad.abs().mean().item())
             self.actor_optimizer.step()
 
             # target update (vf)
@@ -315,9 +312,6 @@ class SACAgent:
         # train Q functions
         self.qf_1_optimizer.zero_grad()
         qf_1_loss.backward()
-        if self.total_step % 1000 == 0:
-            g = self.qf_1.hidden1.weight.grad.abs().mean().item()
-            print(f"[{self.total_step:>7}] mean|grad(Q1 hidden1 W)| = {g:.6f}")
         self.qf_1_optimizer.step()
 
         self.qf_2_optimizer.zero_grad()
@@ -461,7 +455,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--discount-factor", type=float, default=0.99)
     parser.add_argument("--tau", type=float, default=5e-3)
-    parser.add_argument("--batch-size", type=int, default=256)
+    parser.add_argument("--batch-size", type=int, default=512)
     parser.add_argument("--initial-random-steps", type=int, default=10000)
     parser.add_argument("--memory-size", type=int, default=1000000)
     parser.add_argument("--num-steps", type=float, default=1000000)
